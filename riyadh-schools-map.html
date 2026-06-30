@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Riyadh Schools Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root{ --bg:#f7f8fa; --panel:#ffffff; --ink:#1f2933; --muted:#7b8794; --line:#e4e7eb; }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--ink); }
+  #app{ display:flex; height:100vh; width:100vw; overflow:hidden; }
+  #sidebar{ width:320px; flex:0 0 320px; background:var(--panel); border-right:1px solid var(--line); display:flex; flex-direction:column; }
+  #map{ flex:1; height:100%; }
+  .sb-head{ padding:18px 18px 12px; border-bottom:1px solid var(--line); }
+  .sb-head h1{ font-size:17px; margin:0 0 4px; }
+  .sb-head p{ font-size:12px; color:var(--muted); margin:0; line-height:1.45; }
+  .sb-body{ overflow-y:auto; padding:8px 12px 16px; flex:1; }
+  .controls{ display:flex; gap:8px; padding:10px 6px 6px; }
+  .controls button{ flex:1; font-size:12px; padding:6px 8px; border:1px solid var(--line); background:#fff; border-radius:7px; cursor:pointer; color:var(--ink); }
+  .controls button:hover{ background:#f0f2f5; }
+  .group{ margin-top:12px; }
+  .group h2{ font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); margin:0 0 4px 6px; }
+  .row{ display:flex; align-items:center; gap:9px; padding:7px 8px; border-radius:9px; cursor:pointer; }
+  .row:hover{ background:#f3f5f8; }
+  .row input{ width:16px; height:16px; accent-color:#2563eb; cursor:pointer; flex:0 0 auto; }
+  .swatch{ width:12px; height:12px; border-radius:3px; flex:0 0 auto; border:1px solid rgba(0,0,0,.15); }
+  .row .label{ font-size:13px; line-height:1.25; }
+  .row .sub{ font-size:11px; color:var(--muted); }
+  .approxTag{ display:inline-block; font-size:10px; color:#b45309; background:#fef3c7; border-radius:4px; padding:0 5px; margin-left:4px; vertical-align:middle; }
+  .foot{ font-size:11px; color:var(--muted); padding:10px 16px; border-top:1px solid var(--line); line-height:1.5; }
+  .leaflet-tooltip.campus-tip{ font-weight:600; font-size:12.5px; padding:5px 9px; border:none; box-shadow:0 2px 8px rgba(0,0,0,.18); border-radius:7px; }
+  .popup-title{ font-weight:700; font-size:13.5px; margin-bottom:3px; }
+  .popup-meta{ font-size:12px; color:#52606d; line-height:1.5; }
+  .legend-note{ background:#fff7ed; border:1px solid #fed7aa; color:#92400e; font-size:11px; border-radius:7px; padding:7px 9px; margin:10px 6px 0; line-height:1.45; }
+  @media (max-width:720px){
+    #app{ flex-direction:column; }
+    #sidebar{ width:100%; flex:0 0 auto; max-height:46vh; border-right:none; border-bottom:1px solid var(--line); }
+    #map{ flex:1; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="sb-head">
+      <h1>Riyadh Schools Map</h1>
+      <p>School campuses with their Riyadh neighborhoods outlined and shaded. Toggle any campus on or off.</p>
+    </div>
+    <div class="sb-body">
+      <div class="controls">
+        <button id="allOn">Select all</button>
+        <button id="allOff">Clear all</button>
+      </div>
+      <div id="groups"></div>
+      <div class="legend-note">Pins are placed at neighborhood level (the correct district), not the exact building. Items marked <span class="approxTag">approx</span> are best-effort estimates to verify.</div>
+    </div>
+    <div class="foot">Boundaries: OpenStreetMap district data. Base map &copy; OpenStreetMap, &copy; CARTO.</div>
+  </aside>
+  <div id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const DISTRICTS = [{"id":"R13254392","name":"Al Masif District","lat":24.7655,"lon":46.6802,"type":"Polygon","coords":[[[46.6684,24.7699],[46.6691,24.7685],[46.6708,24.7651],[46.6723,24.762],[46.6724,24.7619],[46.6724,24.7619],[46.6724,24.7618],[46.6748,24.7572],[46.6749,24.7569],[46.6753,24.7561],[46.6767,24.7535],[46.6767,24.7535],[46.6767,24.7535],[46.6767,24.7535],[46.6804,24.755],[46.6947,24.761],[46.6896,24.7711],[46.6864,24.7775],[46.6694,24.7704],[46.6684,24.7699]]]},{"id":"R13254407","name":"Irqah District","lat":24.6841,"lon":46.5826,"type":"Polygon","coords":[[[46.5572,24.6801],[46.5573,24.6774],[46.5573,24.6762],[46.5631,24.6761],[46.5653,24.6763],[46.5683,24.6771],[46.5696,24.6769],[46.5706,24.6764],[46.5737,24.6722],[46.5737,24.6721],[46.5794,24.6693],[46.5815,24.6705],[46.585,24.6689],[46.5876,24.6683],[46.5896,24.6683],[46.598,24.6722],[46.6,24.6726],[46.6028,24.6714],[46.6043,24.6696],[46.606,24.6687],[46.6076,24.6689],[46.6101,24.6715],[46.6107,24.6731],[46.611,24.6773],[46.6106,24.6784],[46.6094,24.6795],[46.6091,24.68],[46.6089,24.6805],[46.6091,24.6821],[46.6107,24.6843],[46.6122,24.6857],[46.6127,24.6867],[46.6132,24.6879],[46.6135,24.6889],[46.6148,24.6899],[46.6154,24.6906],[46.6157,24.691],[46.6162,24.6922],[46.6172,24.6932],[46.6112,24.6975],[46.6061,24.701],[46.6042,24.7028],[46.6006,24.7089],[46.594,24.7095],[46.5937,24.7095],[46.5917,24.7099],[46.5842,24.7066],[46.5832,24.7064],[46.5764,24.7058],[46.5752,24.7048],[46.5741,24.7039],[46.572,24.7021],[46.5689,24.6996],[46.5685,24.6992],[46.5662,24.6972],[46.5643,24.6951],[46.5621,24.6921],[46.5609,24.6904],[46.5601,24.6895],[46.5593,24.6883],[46.5586,24.6867],[46.5579,24.6848],[46.5575,24.6826],[46.5573,24.6809],[46.5572,24.6801]]]},{"id":"R13254382","name":"Al Yasmin District","lat":24.8169,"lon":46.6361,"type":"Polygon","coords":[[[46.6141,24.8266],[46.6174,24.82],[46.6224,24.8102],[46.6257,24.8116],[46.6436,24.8191],[46.6471,24.8121],[46.6518,24.8029],[46.6518,24.8026],[46.6522,24.8019],[46.6524,24.8015],[46.6526,24.8012],[46.653,24.8006],[46.6535,24.8014],[46.6538,24.8018],[46.6541,24.8022],[46.6545,24.8026],[46.6557,24.8038],[46.6566,24.8045],[46.6581,24.8053],[46.662,24.807],[46.6698,24.8103],[46.6696,24.8108],[46.6682,24.8135],[46.6626,24.8246],[46.6616,24.8266],[46.6615,24.8267],[46.6591,24.8316],[46.6569,24.8358],[46.6544,24.8409],[46.6532,24.8431],[46.6455,24.8398],[46.6393,24.8371],[46.6353,24.8355],[46.6315,24.8339],[46.6216,24.8297],[46.6141,24.8266]]]},{"id":"R13253996","name":"Al Manar District","lat":24.726,"lon":46.7968,"type":"Polygon","coords":[[[46.7834,24.7279],[46.7949,24.7126],[46.8111,24.7227],[46.8111,24.7228],[46.8103,24.7239],[46.8102,24.724],[46.7998,24.7381],[46.787,24.7302],[46.7834,24.7279]]]},{"id":"R13254419","name":"Dhahrat Laban District","lat":24.6329,"lon":46.5531,"type":"Polygon","coords":[[[46.457,24.6058],[46.4611,24.6027],[46.4647,24.6035],[46.4641,24.6046],[46.4674,24.6052],[46.4714,24.6029],[46.4774,24.6041],[46.478,24.6026],[46.4795,24.6029],[46.4821,24.6038],[46.4847,24.6035],[46.4862,24.6066],[46.4956,24.607],[46.5,24.609],[46.5072,24.6041],[46.5305,24.6182],[46.5329,24.6148],[46.5414,24.6147],[46.5514,24.6144],[46.5529,24.6195],[46.5657,24.6199],[46.5705,24.6171],[46.5725,24.6187],[46.5748,24.6212],[46.577,24.6236],[46.5787,24.6258],[46.581,24.629],[46.5827,24.6314],[46.5836,24.6326],[46.5847,24.6342],[46.5858,24.6356],[46.5864,24.6367],[46.587,24.6375],[46.5899,24.6358],[46.5931,24.6339],[46.5957,24.6324],[46.5982,24.6309],[46.5996,24.6303],[46.601,24.6299],[46.6021,24.6296],[46.603,24.6295],[46.6042,24.6295],[46.6051,24.6296],[46.6064,24.6298],[46.6084,24.6304],[46.6099,24.6309],[46.6125,24.6318],[46.6194,24.6342],[46.6244,24.6358],[46.626,24.6359],[46.6289,24.6353],[46.6341,24.634],[46.636,24.6336],[46.6371,24.6336],[46.6377,24.6336],[46.6383,24.6337],[46.6388,24.6339],[46.6393,24.6341],[46.6397,24.6343],[46.64,24.6344],[46.6407,24.6349],[46.6414,24.6356],[46.6419,24.6362],[46.6424,24.6371],[46.6428,24.6381],[46.6439,24.641],[46.6427,24.6416],[46.641,24.6426],[46.6398,24.6433],[46.6378,24.6443],[46.6359,24.6454],[46.6343,24.6461],[46.6324,24.647],[46.6309,24.6477],[46.6275,24.6491],[46.6275,24.6492],[46.6206,24.6531],[46.6177,24.6546],[46.6177,24.6547],[46.614,24.6558],[46.6124,24.6561],[46.6085,24.6569],[46.606,24.6546],[46.6056,24.6545],[46.6052,24.6548],[46.6045,24.657],[46.6016,24.6552],[46.5943,24.6604],[46.5872,24.6597],[46.5886,24.6609],[46.5858,24.6614],[46.5841,24.6607],[46.5833,24.6633],[46.5789,24.6633],[46.577,24.6638],[46.5744,24.6646],[46.5614,24.6619],[46.5606,24.6585],[46.5575,24.6572],[46.5527,24.6552],[46.5496,24.651],[46.5421,24.6444],[46.5398,24.6418],[46.5194,24.6279],[46.51,24.6262],[46.4945,24.6197],[46.4925,24.6178],[46.4919,24.6151],[46.4901,24.614],[46.4868,24.6115],[46.4848,24.6096],[46.4785,24.6071],[46.479,24.6086],[46.4815,24.6093],[46.4821,24.61],[46.4841,24.6136],[46.4763,24.613],[46.4707,24.6109],[46.468,24.6121],[46.4646,24.6105],[46.461,24.6106],[46.4604,24.6114],[46.4586,24.6082],[46.4577,24.6081],[46.457,24.6058]]]},{"id":"R13254431","name":"Al Malqa District","lat":24.801,"lon":46.6007,"type":"Polygon","coords":[[[46.5648,24.7968],[46.5661,24.7923],[46.5663,24.7915],[46.568,24.7852],[46.5688,24.7831],[46.5705,24.7794],[46.5707,24.7789],[46.5725,24.7749],[46.5798,24.7777],[46.5832,24.779],[46.5863,24.779],[46.5873,24.7787],[46.5899,24.7777],[46.5909,24.7776],[46.5916,24.7776],[46.5924,24.7778],[46.5932,24.7781],[46.5958,24.7791],[46.6005,24.7812],[46.6127,24.7862],[46.6129,24.7863],[46.6307,24.7938],[46.6303,24.7944],[46.6277,24.7997],[46.6224,24.8102],[46.6174,24.82],[46.6141,24.8266],[46.5953,24.8187],[46.588,24.8156],[46.5853,24.8144],[46.5842,24.8138],[46.5828,24.8128],[46.5821,24.8123],[46.5818,24.812],[46.5811,24.8113],[46.5804,24.8105],[46.5798,24.8097],[46.5793,24.8089],[46.5767,24.8047],[46.5756,24.8028],[46.5747,24.8014],[46.5742,24.8006],[46.5737,24.8001],[46.5732,24.7995],[46.5727,24.7992],[46.5722,24.7989],[46.5715,24.7985],[46.5709,24.7983],[46.5704,24.7981],[46.5662,24.7971],[46.5648,24.7968]]]},{"id":"R13254432","name":"Ghirnatah District","lat":24.7912,"lon":46.7437,"type":"Polygon","coords":[[[46.7223,24.7926],[46.7262,24.7848],[46.7281,24.7811],[46.7299,24.7776],[46.7306,24.7762],[46.7461,24.7827],[46.7486,24.7838],[46.7635,24.7901],[46.7657,24.791],[46.7664,24.7912],[46.7626,24.7987],[46.758,24.8077],[46.7572,24.8073],[46.7524,24.8053],[46.741,24.8005],[46.7302,24.7959],[46.7223,24.7926]]]}];
+
+const DCOLOR = {
+  R13254392:"#4e79a7", R13254407:"#59a14f", R13254382:"#e15759",
+  R13253996:"#b07aa1", R13254419:"#f28e2b", R13254431:"#76b7b2",
+  R13254432:"#d4a017", GLA:"#9c755f"
+};
+
+const CAMPUSES = [
+  { id:"darbarah", name:"Dar Al Barah International School", school:"Dar Al Barah", lat:24.7665, lon:46.6735, district:"R13254392", note:"Neighborhood-level pin — Al Masif District (west of Panda). Verify exact building." },
+  { id:"ik_irqah", name:"Ibn Khaldun – Irqah Campus", school:"Ibn Khaldun", lat:24.6841, lon:46.5826, district:"R13254407", note:"Neighborhood-level pin — Irqah District." },
+  { id:"ik_yasmin", name:"Ibn Khaldun – Al Yasmin Campus", school:"Ibn Khaldun", lat:24.8169, lon:46.6361, district:"R13254382", note:"Neighborhood-level pin — Al Yasmin District." },
+  { id:"ik_manar", name:"Ibn Khaldun – Al Manar Campus", school:"Ibn Khaldun", lat:24.726, lon:46.7968, district:"R13253996", note:"Neighborhood-level pin — Al Manar District." },
+  { id:"sakab", name:"Al Sakab International School", school:"Al Sakab", lat:24.6329, lon:46.5531, district:"R13254419", note:"Neighborhood-level pin — Dhahrat Laban District." },
+  { id:"dome_masif", name:"Dome International – Al Masif Campus", school:"Dome International", lat:24.7625, lon:46.6875, district:"R13254392", note:"Neighborhood-level pin — Al Masif District. Verify exact building." },
+  { id:"dome_malqa", name:"Dome International – Al Malqa Campus", school:"Dome International", lat:24.801, lon:46.6007, district:"R13254431", note:"Neighborhood-level pin — Al Malqa District." },
+  { id:"dome_gla", name:"Dome International – Global Line Academy", school:"Dome International", lat:24.83, lon:46.62, district:null, approx:true, note:"Approximate location only — third campus address not confirmed (northern Riyadh)." },
+  { id:"acad", name:"Academic City School", school:"Academic City", lat:24.7912, lon:46.7437, district:"R13254432", note:"Neighborhood-level pin — Ghirnatah District." }
+];
+
+// ---- Map ----
+const map = L.map("map", { zoomControl:true }).setView([24.72,46.66], 11);
+L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+  maxZoom:19, attribution:'&copy; OpenStreetMap, &copy; CARTO'
+}).addTo(map);
+
+// District polygons (lon,lat -> lat,lon)
+const districtLayers = {};
+DISTRICTS.forEach(d=>{
+  const color = DCOLOR[d.id] || "#666";
+  const latlngs = d.coords.map(ring => ring.map(p => [p[1], p[0]]));
+  const poly = L.polygon(latlngs, {
+    color: color, weight:2, opacity:0.9, fillColor:color, fillOpacity:0.18
+  });
+  poly.bindTooltip(d.name.replace(" District",""), {sticky:true, className:"campus-tip", opacity:0.95});
+  districtLayers[d.id] = poly;
+});
+
+// Campus markers
+const campusMarkers = {};
+CAMPUSES.forEach(c=>{
+  const color = c.district ? (DCOLOR[c.district]||"#666") : DCOLOR.GLA;
+  const m = L.circleMarker([c.lat,c.lon], {
+    radius:9, color:"#ffffff", weight:2.5, fillColor:color, fillOpacity:1
+  });
+  const tip = c.name + (c.approx ? " (approx)" : "");
+  m.bindTooltip(tip, {direction:"top", className:"campus-tip", offset:[0,-6], opacity:0.97});
+  m.bindPopup(
+    '<div class="popup-title">'+c.name+'</div>'+
+    '<div class="popup-meta">'+c.note+'</div>'
+  );
+  campusMarkers[c.id] = m;
+});
+
+// Visibility logic: district shows if any of its campuses are checked
+const enabled = {};
+CAMPUSES.forEach(c=> enabled[c.id]=true);
+
+function refresh(){
+  // markers
+  CAMPUSES.forEach(c=>{
+    const m = campusMarkers[c.id];
+    if(enabled[c.id]){ if(!map.hasLayer(m)) m.addTo(map); }
+    else { if(map.hasLayer(m)) map.removeLayer(m); }
+  });
+  // districts (show if at least one campus in it is enabled)
+  DISTRICTS.forEach(d=>{
+    const any = CAMPUSES.some(c=> c.district===d.id && enabled[c.id]);
+    const poly = districtLayers[d.id];
+    if(any){ if(!map.hasLayer(poly)) poly.addTo(map); poly.bringToBack(); }
+    else { if(map.hasLayer(poly)) map.removeLayer(poly); }
+  });
+}
+
+// Sidebar build (grouped by school)
+const groupsEl = document.getElementById("groups");
+const bySchool = {};
+CAMPUSES.forEach(c=>{ (bySchool[c.school]=bySchool[c.school]||[]).push(c); });
+Object.keys(bySchool).forEach(school=>{
+  const g = document.createElement("div"); g.className="group";
+  const h = document.createElement("h2"); h.textContent=school; g.appendChild(h);
+  bySchool[school].forEach(c=>{
+    const color = c.district ? (DCOLOR[c.district]||"#666") : DCOLOR.GLA;
+    const row = document.createElement("label"); row.className="row";
+    row.innerHTML =
+      '<input type="checkbox" checked data-id="'+c.id+'">'+
+      '<span class="swatch" style="background:'+color+'"></span>'+
+      '<span><span class="label">'+c.name.replace(school+" – ","").replace(school,"Main")+'</span>'+
+      (c.approx?'<span class="approxTag">approx</span>':'')+'</span>';
+    g.appendChild(row);
+    const cb = row.querySelector("input");
+    cb.addEventListener("change", ()=>{ enabled[c.id]=cb.checked; refresh(); });
+    row.addEventListener("dblclick", ()=>{ map.setView([c.lat,c.lon], 14); });
+  });
+  groupsEl.appendChild(g);
+});
+
+document.getElementById("allOn").addEventListener("click", ()=>{
+  CAMPUSES.forEach(c=> enabled[c.id]=true);
+  document.querySelectorAll('#groups input').forEach(cb=> cb.checked=true);
+  refresh();
+});
+document.getElementById("allOff").addEventListener("click", ()=>{
+  CAMPUSES.forEach(c=> enabled[c.id]=false);
+  document.querySelectorAll('#groups input').forEach(cb=> cb.checked=false);
+  refresh();
+});
+
+refresh();
+// Fit to all campuses
+const all = L.featureGroup(Object.values(campusMarkers));
+map.fitBounds(all.getBounds().pad(0.15));
+</script>
+</body>
+</html>
