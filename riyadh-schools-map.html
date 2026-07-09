@@ -6,12 +6,13 @@
 <title>Riyadh Schools Map</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
-  :root{ --bg:#f7f8fa; --panel:#ffffff; --ink:#1f2933; --muted:#7b8794; --line:#e4e7eb; }
+  :root{ --bg:#f7f8fa; --panel:#ffffff; --ink:#1f2933; --muted:#7b8794; --line:#e4e7eb; --accent:#2563eb; }
   *{ box-sizing:border-box; }
   html,body{ margin:0; height:100%; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--ink); }
   #app{ display:flex; height:100vh; width:100vw; overflow:hidden; }
-  #sidebar{ width:320px; flex:0 0 320px; background:var(--panel); border-right:1px solid var(--line); display:flex; flex-direction:column; }
-  #map{ flex:1; height:100%; }
+  #sidebar{ width:330px; flex:0 0 330px; background:var(--panel); border-right:1px solid var(--line); display:flex; flex-direction:column; }
+  .map-wrap{ position:relative; flex:1; height:100%; }
+  #map{ width:100%; height:100%; }
   .sb-head{ padding:18px 18px 12px; border-bottom:1px solid var(--line); }
   .sb-head h1{ font-size:17px; margin:0 0 4px; }
   .sb-head p{ font-size:12px; color:var(--muted); margin:0; line-height:1.45; }
@@ -19,24 +20,61 @@
   .controls{ display:flex; gap:8px; padding:10px 6px 6px; }
   .controls button{ flex:1; font-size:12px; padding:6px 8px; border:1px solid var(--line); background:#fff; border-radius:7px; cursor:pointer; color:var(--ink); }
   .controls button:hover{ background:#f0f2f5; }
+  .add-btn{ width:100%; margin:2px 6px 4px; padding:9px 10px; font-size:13px; font-weight:600; border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:8px; cursor:pointer; }
+  .add-btn:hover{ background:#1e50c9; }
+  .add-btn.armed{ background:#b91c1c; border-color:#b91c1c; }
   .group{ margin-top:12px; }
   .group h2{ font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); margin:0 0 4px 6px; }
-  .row{ display:flex; align-items:center; gap:9px; padding:7px 8px; border-radius:9px; cursor:pointer; }
+  .row{ display:flex; align-items:center; gap:9px; padding:7px 8px; border-radius:9px; }
   .row:hover{ background:#f3f5f8; }
-  .row input{ width:16px; height:16px; accent-color:#2563eb; cursor:pointer; flex:0 0 auto; }
+  .row input[type=checkbox]{ width:16px; height:16px; accent-color:#2563eb; cursor:pointer; flex:0 0 auto; }
   .swatch{ width:12px; height:12px; border-radius:3px; flex:0 0 auto; border:1px solid rgba(0,0,0,.15); }
+  .row .name{ flex:1; min-width:0; cursor:pointer; }
   .row .label{ font-size:13px; line-height:1.25; }
-  .row .sub{ font-size:11px; color:var(--muted); }
+  .row .hood{ font-size:11px; color:var(--muted); display:block; }
+  .row .act{ font-size:12.5px; opacity:0; padding:2px 5px; border:none; background:none; cursor:pointer; border-radius:6px; }
+  .row:hover .act{ opacity:.75; }
+  .row .act:hover{ opacity:1; background:#e6eaf0; }
+  .row .act.del{ color:#b91c1c; }
+  .customTag{ display:inline-block; font-size:10px; color:#1e40af; background:#dbeafe; border-radius:4px; padding:0 5px; margin-left:4px; vertical-align:middle; }
   .approxTag{ display:inline-block; font-size:10px; color:#b45309; background:#fef3c7; border-radius:4px; padding:0 5px; margin-left:4px; vertical-align:middle; }
   .foot{ font-size:11px; color:var(--muted); padding:10px 16px; border-top:1px solid var(--line); line-height:1.5; }
   .leaflet-tooltip.campus-tip{ font-weight:600; font-size:12.5px; padding:5px 9px; border:none; box-shadow:0 2px 8px rgba(0,0,0,.18); border-radius:7px; }
   .popup-title{ font-weight:700; font-size:13.5px; margin-bottom:3px; }
   .popup-meta{ font-size:12px; color:#52606d; line-height:1.5; }
+  .popup-act{ margin-top:6px; font-size:12px; }
+  .popup-act a{ color:var(--accent); text-decoration:none; margin-right:12px; }
+  .popup-act a.rm{ color:#b91c1c; }
   .legend-note{ background:#fff7ed; border:1px solid #fed7aa; color:#92400e; font-size:11px; border-radius:7px; padding:7px 9px; margin:10px 6px 0; line-height:1.45; }
+  #armBanner{ display:none; position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:1200;
+    background:#111827; color:#fff; font-size:12.5px; padding:8px 14px; border-radius:20px; box-shadow:0 3px 12px rgba(0,0,0,.28); }
+  #armBanner b{ font-weight:700; }
+  .map-wrap.arming #map{ cursor:crosshair; }
+  #overlay{ display:none; position:fixed; inset:0; z-index:2000; background:rgba(17,24,39,.42); align-items:center; justify-content:center; }
+  #overlay.show{ display:flex; }
+  .modal{ width:360px; max-width:92vw; background:#fff; border-radius:14px; box-shadow:0 12px 40px rgba(0,0,0,.3); overflow:hidden; }
+  .modal h3{ margin:0; padding:16px 18px 12px; font-size:15px; border-bottom:1px solid var(--line); }
+  .modal .body{ padding:14px 18px 4px; max-height:70vh; overflow-y:auto; }
+  .field{ margin-bottom:12px; }
+  .field label{ display:block; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin-bottom:4px; }
+  .field input, .field select, .field textarea{ width:100%; font-size:13px; padding:8px 9px; border:1px solid var(--line); border-radius:8px; color:var(--ink); font-family:inherit; background:#fff; }
+  .field textarea{ resize:vertical; min-height:42px; }
+  .twocol{ display:flex; gap:10px; }
+  .twocol .field{ flex:1; }
+  .pickbtn{ width:100%; font-size:12.5px; font-weight:600; padding:8px; border:1px dashed var(--accent); color:var(--accent); background:#f5f8ff; border-radius:8px; cursor:pointer; }
+  .pickbtn:hover{ background:#e9f0ff; }
+  .modal .actions{ display:flex; gap:8px; padding:10px 18px 18px; }
+  .modal .actions button{ font-size:13px; font-weight:600; padding:9px; border-radius:8px; cursor:pointer; border:1px solid var(--line); }
+  .btn-save{ flex:1; background:var(--accent); color:#fff; border-color:var(--accent); }
+  .btn-save:hover{ background:#1e50c9; }
+  .btn-cancel{ flex:1; background:#fff; color:var(--ink); }
+  .btn-cancel:hover{ background:#f0f2f5; }
+  .btn-del{ background:#fff; color:#b91c1c; border-color:#f1c4c4; }
+  .btn-del:hover{ background:#fdecec; }
   @media (max-width:720px){
     #app{ flex-direction:column; }
     #sidebar{ width:100%; flex:0 0 auto; max-height:46vh; border-right:none; border-bottom:1px solid var(--line); }
-    #map{ flex:1; }
+    .map-wrap{ flex:1; }
   }
 </style>
 </head>
@@ -45,9 +83,10 @@
   <aside id="sidebar">
     <div class="sb-head">
       <h1>Riyadh Schools Map</h1>
-      <p>School campuses with their Riyadh neighborhoods outlined and shaded. Toggle any campus on or off.</p>
+      <p>School campuses with their Riyadh neighborhoods outlined. Toggle, add, or edit any campus. Hover a row for edit (✎) and remove.</p>
     </div>
     <div class="sb-body">
+      <button id="addSchool" class="add-btn">+ Add school / location</button>
       <div class="controls">
         <button id="allOn">Select all</button>
         <button id="allOff">Clear all</button>
@@ -57,8 +96,59 @@
     </div>
     <div class="foot">Boundaries: OpenStreetMap district data. Base map &copy; OpenStreetMap, &copy; CARTO.</div>
   </aside>
-  <div id="map"></div>
+  <div class="map-wrap" id="mapWrap">
+    <div id="armBanner"></div>
+    <div id="map"></div>
+  </div>
 </div>
+
+<!-- Add / edit modal -->
+<div id="overlay">
+  <div class="modal">
+    <h3 id="m_title">Add a school / location</h3>
+    <div class="body">
+      <div class="field">
+        <label>School</label>
+        <select id="f_schoolSel"></select>
+      </div>
+      <div class="field" id="f_newSchoolWrap" style="display:none">
+        <label>New school name</label>
+        <input id="f_schoolNew" type="text" placeholder="e.g. Ibn Khaldun" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label>Campus / location name <span style="text-transform:none;color:var(--muted)">(optional)</span></label>
+        <input id="f_campus" type="text" placeholder="e.g. North Campus" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label>Neighborhood</label>
+        <input id="f_hood" list="hoodList" placeholder="Type to search Riyadh neighborhoods…" autocomplete="off" />
+      </div>
+      <div class="twocol">
+        <div class="field">
+          <label>Latitude</label>
+          <input id="f_lat" type="number" step="0.000001" placeholder="24.7000" />
+        </div>
+        <div class="field">
+          <label>Longitude</label>
+          <input id="f_lon" type="number" step="0.000001" placeholder="46.6700" />
+        </div>
+      </div>
+      <div class="field">
+        <button type="button" class="pickbtn" id="f_pick">📍 Pick / move location on map</button>
+      </div>
+      <div class="field">
+        <label>Note (optional)</label>
+        <textarea id="f_note" placeholder="Anything to verify, contact, etc."></textarea>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn-del" id="f_delete" style="display:none">Delete</button>
+      <button class="btn-cancel" id="f_cancel">Cancel</button>
+      <button class="btn-save" id="f_save">Save</button>
+    </div>
+  </div>
+</div>
+<datalist id="hoodList"></datalist>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
@@ -67,7 +157,17 @@ const DISTRICTS = [{"id":"R13254392","name":"Al Masif District","lat":24.7655,"l
 const DCOLOR = {
   R13254392:"#4e79a7", R13254407:"#59a14f", R13254382:"#e15759",
   R13253996:"#b07aa1", R13254419:"#f28e2b", R13254431:"#76b7b2",
-  R13254432:"#d4a017", GLA:"#9c755f"
+  R13254432:"#d4a017", GLA:"#9c755f", CUSTOM:"#2563eb"
+};
+
+// Full Riyadh neighborhood list for the type-ahead. The seven with polygon data
+// map to a district id (colored + outlined); the rest tag the pin by name only.
+const NEIGHBORHOODS = ["Al Aqiq","Al Andalus","Al Arid","Al Aziziyah","Al Badiah","Al Batha","Al Dar Al Baida","Al Difa","Ad Dirah","Al Dubbat","Al Fakhriyah","Al Faisaliyah","Al Falah","Al Faruq","Al Fayha","Al Futah","Al Ghadir","Al Hamra","Al Hazm","Al Iskan","Al Izdihar","Al Janadriyah","Al Jaradiyah","Al Jazirah","Al Khaleej","Al Khuzama","Al Maather","Al Mahdiyah","Al Malaz","Al Malqa","Al Manakh","Al Manar","Al Mansurah","Al Margab","Al Marwah","Al Masif","Al Mughrizat","Al Muhammadiyah","Al Munsiyah","Al Murabba","Al Muruj","Al Mursalat","Al Mutamarat","Al Nada","Al Nafl","Al Nahdah","Al Nakheel","Al Namudhajiyah","Al Naseem","Al Nasriyah","Al Narjis","Al Nadhim","Al Olaya","Al Oud","Al Quds","Al Qadisiyah","Al Qairawan","Al Rabi","Al Rabwah","Al Rahmaniyah","Al Rawabi","Al Rawdah","Al Rayan","Al Rimal","Al Rimayah","Al Safarat","Al Sahafah","Al Salam","Al Salhiyah","Al Saadah","Al Shifa","Al Sharq","Al Shohada","Al Shomaisi","Al Sulay","Al Sulimaniyah","Al Suwaidi","Al Suwaidi Al Gharbi","Al Taawun","Al Uraija","Al Uraija Al Gharbiyah","Al Wadi","Al Wahah","Al Wizarat","Al Wurud","Al Yamamah","Al Yarmuk","Al Yasmin","Az Zahra","Badr","Dhahrat Al Badiah","Dhahrat Laban","Dhahrat Namar","Diplomatic Quarter","Dirab","Ghirnatah","Ghubairah","Hittin","Irqah","Ishbiliyah","Jarir","King Abdulaziz District","King Abdullah District","King Fahd District","King Faisal District","Laban","Manfuha","Manfuha Al Jadidah","Namar","Qurtubah","Salah Ad Din","Shubra","Sultanah","Taybah","Al Thulaim","Tuwaiq","Umm Al Hamam Al Gharbi","Umm Al Hamam Al Sharqi","Umm Salim","Al Utayqah"];
+
+// Neighborhood display name -> polygon district id (only the ones we have shapes for)
+const NAME2ID = {
+  "Al Masif":"R13254392","Irqah":"R13254407","Al Yasmin":"R13254382",
+  "Al Manar":"R13253996","Dhahrat Laban":"R13254419","Al Malqa":"R13254431","Ghirnatah":"R13254432"
 };
 
 const CAMPUSES = [
@@ -82,6 +182,9 @@ const CAMPUSES = [
   { id:"acad", name:"Academic City School", school:"Academic City", lat:24.7912, lon:46.7437, district:"R13254432", note:"Neighborhood-level pin — Ghirnatah District." }
 ];
 
+const STORAGE_KEY = "riyadh_schools_state_v2";
+const OLD_KEY = "riyadh_custom_schools_v1";
+
 // ---- Map ----
 const map = L.map("map", { zoomControl:true }).setView([24.72,46.66], 11);
 L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
@@ -93,41 +196,69 @@ const districtLayers = {};
 DISTRICTS.forEach(d=>{
   const color = DCOLOR[d.id] || "#666";
   const latlngs = d.coords.map(ring => ring.map(p => [p[1], p[0]]));
-  const poly = L.polygon(latlngs, {
-    color: color, weight:2, opacity:0.9, fillColor:color, fillOpacity:0.18
-  });
+  const poly = L.polygon(latlngs, { color:color, weight:2, opacity:0.9, fillColor:color, fillOpacity:0.18 });
   poly.bindTooltip(d.name.replace(" District",""), {sticky:true, className:"campus-tip", opacity:0.95});
   districtLayers[d.id] = poly;
 });
 
-// Campus markers
-const campusMarkers = {};
-CAMPUSES.forEach(c=>{
-  const color = c.district ? (DCOLOR[c.district]||"#666") : DCOLOR.GLA;
-  const m = L.circleMarker([c.lat,c.lon], {
-    radius:9, color:"#ffffff", weight:2.5, fillColor:color, fillOpacity:1
-  });
-  const tip = c.name + (c.approx ? " (approx)" : "");
-  m.bindTooltip(tip, {direction:"top", className:"campus-tip", offset:[0,-6], opacity:0.97});
-  m.bindPopup(
-    '<div class="popup-title">'+c.name+'</div>'+
-    '<div class="popup-meta">'+c.note+'</div>'
-  );
-  campusMarkers[c.id] = m;
-});
+// ---- Helpers ----
+function campusColor(c){
+  if(c.district && DCOLOR[c.district]) return DCOLOR[c.district];
+  if(c.districtName) return DCOLOR.CUSTOM;
+  return c.custom ? DCOLOR.CUSTOM : DCOLOR.GLA;
+}
+function hoodName(c){
+  if(c.districtName) return c.districtName;
+  if(c.district){ const d=DISTRICTS.find(x=>x.id===c.district); return d ? d.name.replace(" District","") : ""; }
+  return "";
+}
+function deriveCampus(c){
+  if(c.campus!==undefined && c.campus!==null) return c.campus;
+  if(c.name===c.school) return "";
+  if(c.name.startsWith(c.school+" – ")) return c.name.slice((c.school+" – ").length);
+  return c.name.replace(c.school,"").replace(/^\s*[–-]\s*/,"").trim();
+}
+const TIP_OPTS = {direction:"top", className:"campus-tip", offset:[0,-6], opacity:0.97};
 
-// Visibility logic: district shows if any of its campuses are checked
+// ---- Markers ----
+const campusMarkers = {};
 const enabled = {};
-CAMPUSES.forEach(c=> enabled[c.id]=true);
+
+function buildPopup(c){
+  let html = '<div class="popup-title">'+c.name+'</div>'+
+             '<div class="popup-meta">'+(c.note||"")+'</div>'+
+             '<div class="popup-act"><a href="#" data-edit="'+c.id+'">Edit</a>'+
+             (c.custom?'<a href="#" class="rm" data-del="'+c.id+'">Remove</a>':'')+'</div>';
+  return html;
+}
+function addCampusMarker(c){
+  const m = L.circleMarker([c.lat,c.lon], { radius:9, color:"#ffffff", weight:2.5, fillColor:campusColor(c), fillOpacity:1 });
+  m.bindTooltip(c.name + (c.approx ? " (approx)" : ""), TIP_OPTS);
+  m.bindPopup(buildPopup(c));
+  m.on("popupopen", (e)=>{
+    const el = e.popup.getElement();
+    const ed = el.querySelector('[data-edit]'); if(ed) ed.addEventListener("click",(ev)=>{ ev.preventDefault(); map.closePopup(); openEdit(c.id); });
+    const rm = el.querySelector('[data-del]'); if(rm) rm.addEventListener("click",(ev)=>{ ev.preventDefault(); removeCampus(c.id); });
+  });
+  campusMarkers[c.id] = m;
+  if(enabled[c.id]===undefined) enabled[c.id]=true;
+}
+function updateCampusMarker(c){
+  const m = campusMarkers[c.id];
+  if(!m){ addCampusMarker(c); return; }
+  m.setLatLng([c.lat,c.lon]);
+  m.setStyle({ fillColor:campusColor(c) });
+  m.unbindTooltip(); m.bindTooltip(c.name + (c.approx ? " (approx)" : ""), TIP_OPTS);
+  m.setPopupContent(buildPopup(c));
+}
+CAMPUSES.forEach(addCampusMarker);
 
 function refresh(){
-  // markers
   CAMPUSES.forEach(c=>{
-    const m = campusMarkers[c.id];
+    const m = campusMarkers[c.id]; if(!m) return;
     if(enabled[c.id]){ if(!map.hasLayer(m)) m.addTo(map); }
     else { if(map.hasLayer(m)) map.removeLayer(m); }
   });
-  // districts (show if at least one campus in it is enabled)
   DISTRICTS.forEach(d=>{
     const any = CAMPUSES.some(c=> c.district===d.id && enabled[c.id]);
     const poly = districtLayers[d.id];
@@ -136,28 +267,39 @@ function refresh(){
   });
 }
 
-// Sidebar build (grouped by school)
+// ---- Sidebar ----
 const groupsEl = document.getElementById("groups");
-const bySchool = {};
-CAMPUSES.forEach(c=>{ (bySchool[c.school]=bySchool[c.school]||[]).push(c); });
-Object.keys(bySchool).forEach(school=>{
-  const g = document.createElement("div"); g.className="group";
-  const h = document.createElement("h2"); h.textContent=school; g.appendChild(h);
-  bySchool[school].forEach(c=>{
-    const color = c.district ? (DCOLOR[c.district]||"#666") : DCOLOR.GLA;
-    const row = document.createElement("label"); row.className="row";
-    row.innerHTML =
-      '<input type="checkbox" checked data-id="'+c.id+'">'+
-      '<span class="swatch" style="background:'+color+'"></span>'+
-      '<span><span class="label">'+c.name.replace(school+" – ","").replace(school,"Main")+'</span>'+
-      (c.approx?'<span class="approxTag">approx</span>':'')+'</span>';
-    g.appendChild(row);
-    const cb = row.querySelector("input");
-    cb.addEventListener("change", ()=>{ enabled[c.id]=cb.checked; refresh(); });
-    row.addEventListener("dblclick", ()=>{ map.setView([c.lat,c.lon], 14); });
+function buildSidebar(){
+  groupsEl.innerHTML = "";
+  const bySchool = {};
+  CAMPUSES.forEach(c=>{ (bySchool[c.school]=bySchool[c.school]||[]).push(c); });
+  Object.keys(bySchool).sort().forEach(school=>{
+    const g = document.createElement("div"); g.className="group";
+    const h = document.createElement("h2"); h.textContent=school; g.appendChild(h);
+    bySchool[school].forEach(c=>{
+      const row = document.createElement("div"); row.className="row";
+      const short = deriveCampus(c) || "Main";
+      const hn = hoodName(c);
+      row.innerHTML =
+        '<input type="checkbox" '+(enabled[c.id]?"checked":"")+'>'+
+        '<span class="swatch" style="background:'+campusColor(c)+'"></span>'+
+        '<span class="name"><span class="label">'+short+'</span>'+
+        (c.custom?'<span class="customTag">added</span>':'')+
+        (c.approx?'<span class="approxTag">approx</span>':'')+
+        (hn?'<span class="hood">'+hn+'</span>':'')+'</span>'+
+        '<button class="act edit" title="Edit">✎</button>'+
+        (c.custom?'<button class="act del" title="Remove">✕</button>':'');
+      g.appendChild(row);
+      const cb = row.querySelector("input");
+      cb.addEventListener("change", ()=>{ enabled[c.id]=cb.checked; refresh(); });
+      row.querySelector(".name").addEventListener("click", ()=> map.setView([c.lat,c.lon], 14));
+      row.querySelector(".edit").addEventListener("click", (e)=>{ e.stopPropagation(); openEdit(c.id); });
+      const del = row.querySelector(".del");
+      if(del) del.addEventListener("click", (e)=>{ e.stopPropagation(); removeCampus(c.id); });
+    });
+    groupsEl.appendChild(g);
   });
-  groupsEl.appendChild(g);
-});
+}
 
 document.getElementById("allOn").addEventListener("click", ()=>{
   CAMPUSES.forEach(c=> enabled[c.id]=true);
@@ -170,10 +312,218 @@ document.getElementById("allOff").addEventListener("click", ()=>{
   refresh();
 });
 
+// ---- Modal (add + edit) ----
+const mapWrap   = document.getElementById("mapWrap");
+const armBanner = document.getElementById("armBanner");
+const addBtn    = document.getElementById("addSchool");
+const overlay   = document.getElementById("overlay");
+const mTitle    = document.getElementById("m_title");
+const fSchoolSel= document.getElementById("f_schoolSel");
+const fNewWrap  = document.getElementById("f_newSchoolWrap");
+const fSchoolNew= document.getElementById("f_schoolNew");
+const fCampus   = document.getElementById("f_campus");
+const fHood     = document.getElementById("f_hood");
+const fLat      = document.getElementById("f_lat");
+const fLon      = document.getElementById("f_lon");
+const fNote     = document.getElementById("f_note");
+const fDelete   = document.getElementById("f_delete");
+
+let addArming = false;   // waiting for first click to place a new pin
+let picking   = false;   // modal is open-ish and waiting for a click to set coords
+let formMode  = "add";
+let editId    = null;
+
+// neighborhood datalist
+const hoodList = document.getElementById("hoodList");
+NEIGHBORHOODS.slice().sort((a,b)=>a.localeCompare(b)).forEach(n=>{
+  const o=document.createElement("option"); o.value=n; hoodList.appendChild(o);
+});
+
+function uniqueSchools(){
+  return [...new Set(CAMPUSES.map(c=>c.school))].sort((a,b)=>a.localeCompare(b));
+}
+function buildSchoolSelect(selected){
+  fSchoolSel.innerHTML="";
+  uniqueSchools().forEach(s=>{ const o=document.createElement("option"); o.value=s; o.textContent=s; fSchoolSel.appendChild(o); });
+  const nw=document.createElement("option"); nw.value="__new__"; nw.textContent="➕ New school…"; fSchoolSel.appendChild(nw);
+  if(selected && uniqueSchools().includes(selected)) fSchoolSel.value=selected;
+  else fSchoolSel.value="__new__";
+  syncNewSchool();
+}
+function syncNewSchool(){
+  const isNew = fSchoolSel.value==="__new__";
+  fNewWrap.style.display = isNew ? "" : "none";
+  if(!isNew) fSchoolNew.value="";
+}
+fSchoolSel.addEventListener("change", syncNewSchool);
+function getSchool(){ return fSchoolSel.value==="__new__" ? fSchoolNew.value.trim() : fSchoolSel.value; }
+
+function setBanner(text){ armBanner.innerHTML=text; armBanner.style.display = text?"block":"none"; }
+function setAddArming(on){
+  addArming = on;
+  addBtn.classList.toggle("armed", on);
+  addBtn.textContent = on ? "✕ Cancel adding" : "+ Add school / location";
+  mapWrap.classList.toggle("arming", on);
+  setBanner(on ? "<b>Add mode:</b> click anywhere on the map to drop the new pin. <span style='opacity:.7'>(Esc to cancel)</span>" : "");
+}
+addBtn.addEventListener("click", ()=> setAddArming(!addArming));
+
+function showOverlay(){ overlay.classList.add("show"); }
+function hideOverlay(){ overlay.classList.remove("show"); }
+
+function populateForm(c, latlng){
+  fDelete.style.display = (c && c.custom) ? "" : "none";
+  if(c){
+    mTitle.textContent = "Edit location";
+    buildSchoolSelect(c.school);
+    fCampus.value = deriveCampus(c);
+    fHood.value = hoodName(c);
+    fLat.value = c.lat; fLon.value = c.lon;
+    fNote.value = c.note || "";
+  } else {
+    mTitle.textContent = "Add a school / location";
+    buildSchoolSelect(null);
+    fCampus.value=""; fNote.value="";
+    const guess = latlng ? districtContaining(latlng) : null;
+    fHood.value = guess ? DISTRICTS.find(d=>d.id===guess).name.replace(" District","") : "";
+    fLat.value = latlng ? +latlng.lat.toFixed(6) : "";
+    fLon.value = latlng ? +latlng.lng.toFixed(6) : "";
+  }
+}
+
+function openAdd(latlng){ formMode="add"; editId=null; populateForm(null, latlng); showOverlay(); setTimeout(()=>fSchoolNew.focus(),30); }
+function openEdit(id){ const c=CAMPUSES.find(x=>x.id===id); if(!c) return; formMode="edit"; editId=id; populateForm(c); showOverlay(); }
+
+// Pick / move location on map from inside the modal
+document.getElementById("f_pick").addEventListener("click", ()=>{
+  picking = true; hideOverlay();
+  mapWrap.classList.add("arming");
+  setBanner("<b>Set location:</b> click the map to place this pin. <span style='opacity:.7'>(Esc to cancel)</span>");
+});
+
+map.on("click", (e)=>{
+  if(picking){
+    picking=false; mapWrap.classList.remove("arming"); setBanner("");
+    fLat.value = +e.latlng.lat.toFixed(6); fLon.value = +e.latlng.lng.toFixed(6);
+    if(!fHood.value){ const g=districtContaining(e.latlng); if(g) fHood.value=DISTRICTS.find(d=>d.id===g).name.replace(" District",""); }
+    showOverlay();
+    return;
+  }
+  if(addArming){ setAddArming(false); openAdd(e.latlng); }
+});
+
+document.addEventListener("keydown", (e)=>{
+  if(e.key!=="Escape") return;
+  if(addArming) setAddArming(false);
+  if(picking){ picking=false; mapWrap.classList.remove("arming"); setBanner(""); showOverlay(); return; }
+  if(overlay.classList.contains("show")) hideOverlay();
+});
+
+document.getElementById("f_cancel").addEventListener("click", hideOverlay);
+overlay.addEventListener("click", (e)=>{ if(e.target===overlay) hideOverlay(); });
+
+fDelete.addEventListener("click", ()=>{ if(editId) removeCampus(editId); hideOverlay(); });
+
+document.getElementById("f_save").addEventListener("click", ()=>{
+  const school = getSchool();
+  if(!school){ (fSchoolSel.value==="__new__"?fSchoolNew:fSchoolSel).focus(); return; }
+  const campus = fCampus.value.trim();
+  const hood = fHood.value.trim();
+  const lat = parseFloat(fLat.value), lon = parseFloat(fLon.value);
+  if(isNaN(lat)||isNaN(lon)){ fLat.style.borderColor="#b91c1c"; fLon.style.borderColor="#b91c1c"; return; }
+  fLat.style.borderColor=""; fLon.style.borderColor="";
+  const districtId = NAME2ID[hood] || null;
+  const districtName = districtId ? null : (hood || null);
+  const name = campus ? (school + " – " + campus) : school;
+
+  if(formMode==="add"){
+    const c = { id:"custom_"+Date.now().toString(36)+Math.floor(Math.random()*1000),
+      name, school, campus, lat, lon, district:districtId, districtName, custom:true,
+      note: fNote.value.trim() || (hood ? ("Added pin — "+hood+".") : "Added pin.") };
+    CAMPUSES.push(c); enabled[c.id]=true; addCampusMarker(c);
+    buildSidebar(); refresh(); saveState(); hideOverlay();
+    map.setView([c.lat,c.lon],14); campusMarkers[c.id].openPopup();
+  } else {
+    const c = CAMPUSES.find(x=>x.id===editId); if(!c){ hideOverlay(); return; }
+    c.name=name; c.school=school; c.campus=campus; c.lat=lat; c.lon=lon;
+    c.district=districtId; c.districtName=districtName;
+    c.note = fNote.value.trim() || c.note;
+    if(!c.custom) c._edited=true;
+    updateCampusMarker(c);
+    buildSidebar(); refresh(); saveState(); hideOverlay();
+    map.setView([c.lat,c.lon],14);
+  }
+});
+
+function removeCampus(id){
+  const c = CAMPUSES.find(x=>x.id===id);
+  if(!c || !c.custom) return;
+  const m = campusMarkers[id]; if(m && map.hasLayer(m)) map.removeLayer(m);
+  delete campusMarkers[id]; delete enabled[id];
+  const idx = CAMPUSES.indexOf(c); if(idx>-1) CAMPUSES.splice(idx,1);
+  buildSidebar(); refresh(); saveState();
+}
+
+// Point-in-polygon (ray casting) — auto-detect neighborhood from a click
+function districtContaining(latlng){
+  const x=latlng.lng, y=latlng.lat;
+  for(const d of DISTRICTS){
+    for(const ring of d.coords){
+      let inside=false;
+      for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+        const xi=ring[i][0], yi=ring[i][1], xj=ring[j][0], yj=ring[j][1];
+        const it = ((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/(yj-yi)+xi);
+        if(it) inside=!inside;
+      }
+      if(inside) return d.id;
+    }
+  }
+  return null;
+}
+
+// ---- Persistence ----
+function saveState(){
+  try{
+    const customs = CAMPUSES.filter(c=>c.custom).map(c=>({
+      id:c.id, name:c.name, school:c.school, campus:c.campus, lat:c.lat, lon:c.lon,
+      district:c.district, districtName:c.districtName, note:c.note, custom:true, enabled:!!enabled[c.id]
+    }));
+    const overrides = {};
+    CAMPUSES.filter(c=>!c.custom && c._edited).forEach(c=>{
+      overrides[c.id] = { name:c.name, school:c.school, campus:c.campus, lat:c.lat, lon:c.lon,
+        district:c.district, districtName:c.districtName, note:c.note };
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({customs, overrides}));
+  }catch(e){ /* storage unavailable — changes stay for this session only */ }
+}
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const st = JSON.parse(raw);
+      (st.overrides && Object.keys(st.overrides)||[]).forEach(id=>{
+        const c = CAMPUSES.find(x=>x.id===id); if(!c) return;
+        Object.assign(c, st.overrides[id]); c._edited=true;
+      });
+      (st.customs||[]).forEach(c=>{ c.custom=true; enabled[c.id]=c.enabled!==false; CAMPUSES.push(c); });
+      return;
+    }
+    // migrate old v1 customs if present
+    const old = localStorage.getItem(OLD_KEY);
+    if(old){ JSON.parse(old).forEach(c=>{ c.custom=true; enabled[c.id]=c.enabled!==false; CAMPUSES.push(c); }); }
+  }catch(e){ /* ignore corrupt storage */ }
+}
+
+// ---- Init ----
+CAMPUSES.forEach(c=>{ if(enabled[c.id]===undefined) enabled[c.id]=true; });
+loadState();
+// rebuild markers to reflect any loaded overrides / customs
+Object.keys(campusMarkers).forEach(id=>{ const m=campusMarkers[id]; if(map.hasLayer(m)) map.removeLayer(m); delete campusMarkers[id]; });
+CAMPUSES.forEach(addCampusMarker);
+buildSidebar();
 refresh();
-// Fit to all campuses
 const all = L.featureGroup(Object.values(campusMarkers));
-map.fitBounds(all.getBounds().pad(0.15));
+if(Object.keys(campusMarkers).length) map.fitBounds(all.getBounds().pad(0.15));
 </script>
 </body>
 </html>
